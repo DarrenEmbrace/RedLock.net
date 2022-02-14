@@ -97,46 +97,50 @@ namespace RedLockNet.SERedis
 			RaiseConfigurationChanged();
 		}
 
-		public IRedLock CreateLock(string resource, TimeSpan expiryTime)
+		public IRedLock CreateLock(string resource, TimeSpan expiryTime,string lockInfo = null)
 		{
 			return RedLock.Create(
 				this.loggerFactory.CreateLogger<RedLock>(),
 				redisCaches,
 				resource,
 				expiryTime,
+				lockInfo,
 				retryConfiguration: configuration.RetryConfiguration);
 		}
 
-		public async Task<IRedLock> CreateLockAsync(string resource, TimeSpan expiryTime)
+		public async Task<IRedLock> CreateLockAsync(string resource, TimeSpan expiryTime,string lockInfo = null)
 		{
 			return await RedLock.CreateAsync(
 				this.loggerFactory.CreateLogger<RedLock>(),
 				redisCaches,
 				resource,
 				expiryTime,
+				lockInfo,
 				retryConfiguration: configuration.RetryConfiguration).ConfigureAwait(false);
 		}
 
-		public IRedLock CreateLock(string resource, TimeSpan expiryTime, TimeSpan waitTime, TimeSpan retryTime, CancellationToken? cancellationToken = null)
+		public IRedLock CreateLock(string resource, TimeSpan expiryTime, TimeSpan waitTime, TimeSpan retryTime, CancellationToken? cancellationToken = null,string lockInfo = null)
 		{
 			return RedLock.Create(
 				this.loggerFactory.CreateLogger<RedLock>(),
 				redisCaches,
 				resource,
 				expiryTime,
+				lockInfo,
 				waitTime,
 				retryTime,
 				configuration.RetryConfiguration,
 				cancellationToken ?? CancellationToken.None);
 		}
 
-		public async Task<IRedLock> CreateLockAsync(string resource, TimeSpan expiryTime, TimeSpan waitTime, TimeSpan retryTime, CancellationToken? cancellationToken = null)
+		public async Task<IRedLock> CreateLockAsync(string resource, TimeSpan expiryTime, TimeSpan waitTime, TimeSpan retryTime, CancellationToken? cancellationToken = null,string lockInfo = null)
 		{
 			return await RedLock.CreateAsync(
 				this.loggerFactory.CreateLogger<RedLock>(),
 				redisCaches,
 				resource,
 				expiryTime,
+				lockInfo,
 				waitTime,
 				retryTime,
 				configuration.RetryConfiguration,

@@ -61,6 +61,7 @@ namespace RedLockNet.SERedis
 			ICollection<RedisConnection> redisCaches,
 			string resource,
 			TimeSpan expiryTime,
+			string LockInfo,
 			TimeSpan? waitTime = null,
 			TimeSpan? retryTime = null,
 			RedLockRetryConfiguration retryConfiguration = null,
@@ -88,6 +89,10 @@ namespace RedLockNet.SERedis
 
 			Resource = resource;
 			LockId = Guid.NewGuid().ToString();
+			if (LockInfo != null)
+			{
+				LockId += ":" + LockInfo;
+			}
 			this.expiryTime = expiryTime;
 			this.waitTime = waitTime;
 			this.retryTime = retryTime;
@@ -99,6 +104,7 @@ namespace RedLockNet.SERedis
 			ICollection<RedisConnection> redisCaches,
 			string resource,
 			TimeSpan expiryTime,
+			string LockInfo,
 			TimeSpan? waitTime = null,
 			TimeSpan? retryTime = null,
 			RedLockRetryConfiguration retryConfiguration = null,
@@ -109,6 +115,7 @@ namespace RedLockNet.SERedis
 				redisCaches,
 				resource,
 				expiryTime,
+				LockInfo,
 				waitTime,
 				retryTime,
 				retryConfiguration,
@@ -124,6 +131,7 @@ namespace RedLockNet.SERedis
 			ICollection<RedisConnection> redisCaches,
 			string resource,
 			TimeSpan expiryTime,
+			string lockInfo,
 			TimeSpan? waitTime = null,
 			TimeSpan? retryTime = null,
 			RedLockRetryConfiguration retryConfiguration = null,
@@ -134,6 +142,7 @@ namespace RedLockNet.SERedis
 				redisCaches,
 				resource,
 				expiryTime,
+				lockInfo,
 				waitTime,
 				retryTime,
 				retryConfiguration,
