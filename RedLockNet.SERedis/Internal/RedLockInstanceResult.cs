@@ -1,6 +1,6 @@
 ﻿namespace RedLockNet.SERedis.Internal
 {
-	internal enum RedLockInstanceResult
+	public enum RedLockInstanceResult
 	{
 		Success,
 		Conflicted,

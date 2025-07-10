@@ -20,12 +20,11 @@ namespace RedLockNet.SERedis
 		private readonly SemaphoreSlim extendUnlockSemaphore = new SemaphoreSlim(1, 1);
 		private readonly CancellationTokenSource unlockCancellationTokenSource = new CancellationTokenSource();  
 
-		private readonly ICollection<RedisConnection> redisCaches;
-		private readonly ILogger<RedLock> logger;
-
-		private readonly int quorum;
-		private readonly int quorumRetryCount;
-		private readonly int quorumRetryDelayMs;
+		protected readonly ICollection<RedisConnection> redisCaches;
+		protected readonly ILogger<RedLock> logger;
+		protected readonly int quorum;
+		protected readonly int quorumRetryCount;
+		protected readonly int quorumRetryDelayMs;
 		private const double ClockDriftFactor = 0.01;
 		private static readonly long ClockPrecisionPaddingTicks = TimeSpan.FromMilliseconds(2).Ticks;
 		private bool isDisposed;
@@ -45,18 +44,18 @@ namespace RedLockNet.SERedis
 		public RedLockInstanceSummary InstanceSummary { get; private set; }
 		public int ExtendCount { get; private set; }
 
-		private readonly TimeSpan expiryTime;
+		protected readonly TimeSpan expiryTime;
 		private readonly TimeSpan? waitTime;
 		private readonly TimeSpan? retryTime;
-		private CancellationToken cancellationToken;
+		protected CancellationToken cancellationToken;
 
 		private static readonly TimeSpan MinimumExpiryTime = TimeSpan.FromMilliseconds(10);
 		private static readonly TimeSpan MinimumRetryTime = TimeSpan.FromMilliseconds(10);
 
 		private const int DefaultQuorumRetryCount = 3;
 		private const int DefaultQuorumRetryDelayMs = 400;
-
-		private RedLock(
+		
+		protected RedLock(
 			ILogger<RedLock> logger,
 			ICollection<RedisConnection> redisCaches,
 			string resource,
@@ -153,7 +152,7 @@ namespace RedLockNet.SERedis
 			return redisLock;
 		}
 
-		private void Start()
+		protected void Start()
 		{
 			if (waitTime.HasValue && retryTime.HasValue && waitTime.Value.TotalMilliseconds > 0 && retryTime.Value.TotalMilliseconds > 0)
 			{
@@ -379,7 +378,7 @@ namespace RedLockNet.SERedis
 		}
 		
 
-		private long GetRemainingValidityTicks(Stopwatch sw)
+		protected long GetRemainingValidityTicks(Stopwatch sw)
 		{
 			// Add 2 milliseconds to the drift to account for Redis expires precision,
 			// which is 1 milliescond, plus 1 millisecond min drift for small TTLs.
@@ -455,7 +454,7 @@ namespace RedLockNet.SERedis
 			}
 		}
 
-		private RedLockInstanceResult LockInstance(RedisConnection cache)
+		protected virtual RedLockInstanceResult LockInstance(RedisConnection cache)
 		{
 			var redisKey = GetRedisKey(cache.RedisKeyFormat, Resource);
 			var host = GetHost(cache.ConnectionMultiplexer);
@@ -526,7 +525,7 @@ namespace RedLockNet.SERedis
 				// Returns 1 on success, 0 on failure setting expiry or key not existing, -1 if the key value didn't match
 				var extendResult = (long) cache.ConnectionMultiplexer
 					.GetDatabase(cache.RedisDatabase)
-					.ScriptEvaluate(ExtendIfMatchingValueScript, new RedisKey[] {redisKey}, new RedisValue[] {LockId, (long) expiryTime.TotalMilliseconds}, CommandFlags.DemandMaster);
+					.ScriptEvaluate(GetExtendScript(), new RedisKey[] {redisKey}, new RedisValue[] {LockId, (long) expiryTime.TotalMilliseconds}, CommandFlags.DemandMaster);
 
 				result = extendResult == 1 ? RedLockInstanceResult.Success
 					: extendResult == -1 ? RedLockInstanceResult.Conflicted
@@ -543,6 +542,13 @@ namespace RedLockNet.SERedis
 
 			return result;
 		}
+
+		// just override it with extend updated, which accounts for the releases
+		protected virtual string GetExtendScript()
+		{
+			return ExtendIfMatchingValueScript;
+		}
+		
 		
 		private void UnlockInstance(RedisConnection cache)
 		{
@@ -591,12 +597,12 @@ namespace RedLockNet.SERedis
 			return result;
 		}
 
-		private static string GetRedisKey(string redisKeyFormat, string resource)
+		protected static string GetRedisKey(string redisKeyFormat, string resource)
 		{
 			return string.Format(redisKeyFormat, resource);
 		}
 
-		internal static string GetHost(IConnectionMultiplexer cache)
+		protected static string GetHost(IConnectionMultiplexer cache)
 		{
 			var result = new StringBuilder();
 
@@ -673,7 +679,7 @@ namespace RedLockNet.SERedis
 			isDisposed = true;
 		}
 
-		private RedLockStatus GetFailedRedLockStatus(RedLockInstanceSummary lockResult)
+		protected RedLockStatus GetFailedRedLockStatus(RedLockInstanceSummary lockResult)
 		{
 			if (lockResult.Acquired >= quorum)
 			{
@@ -690,7 +696,7 @@ namespace RedLockNet.SERedis
 			return RedLockStatus.NoQuorum;
 		}
 
-		private static RedLockInstanceSummary PopulateRedLockResult(IEnumerable<RedLockInstanceResult> instanceResults)
+		protected static RedLockInstanceSummary PopulateRedLockResult(IEnumerable<RedLockInstanceResult> instanceResults)
 		{
 			var acquired = 0;
 			var conflicted = 0;

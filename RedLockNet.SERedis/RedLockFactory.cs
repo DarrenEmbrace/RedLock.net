@@ -12,9 +12,9 @@ namespace RedLockNet.SERedis
 {
 	public class RedLockFactory : IDistributedLockFactory, IDisposable
 	{
-		private readonly RedLockConfiguration configuration;
-		private readonly ILoggerFactory loggerFactory;
-		private readonly ICollection<RedisConnection> redisCaches;
+		protected readonly RedLockConfiguration configuration;
+		protected readonly ILoggerFactory loggerFactory;
+		protected readonly ICollection<RedisConnection> redisCaches;
 
 		public event EventHandler<RedLockConfigurationChangedEventArgs> ConfigurationChanged;
 
