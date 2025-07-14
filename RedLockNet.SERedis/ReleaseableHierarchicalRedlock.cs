@@ -13,13 +13,12 @@ using StackExchange.Redis;
 
 namespace RedLockNet.SERedis
 {
-    public class ReleaseableRedlock : HierarchicalRedLock
+    public class ReleaseableHierarchicalRedlock : HierarchicalRedLock
     {
-        
 
         private static readonly string ExtendIfNoReleaseScript =
             EmbeddedResourceLoader.GetEmbeddedResource("RedLockNet.SERedis.Lua.ExtendUpdated.lua");
-        protected ReleaseableRedlock(ILogger<RedLock> logger, ICollection<RedisConnection> redisCaches,
+        protected ReleaseableHierarchicalRedlock(ILogger<RedLock> logger, ICollection<RedisConnection> redisCaches,
             string parentResource, string resource, TimeSpan expiryTime, string LockInfo, TimeSpan? waitTime = null,
             TimeSpan? retryTime = null, RedLockRetryConfiguration retryConfiguration = null,
             CancellationToken? cancellationToken = null) : base(logger, redisCaches, parentResource, resource,
@@ -31,10 +30,87 @@ namespace RedLockNet.SERedis
         {
             return ExtendIfNoReleaseScript;
         }
+        
+        internal new static ReleaseableHierarchicalRedlock CreateHierarchical(
+            ILogger<RedLock> logger,
+            ICollection<RedisConnection> redisCaches,
+            string parentResource,
+            string resource,
+            TimeSpan expiryTime,
+            string LockInfo,
+            TimeSpan? waitTime = null,
+            TimeSpan? retryTime = null,
+            RedLockRetryConfiguration retryConfiguration = null,
+            CancellationToken? cancellationToken = null)
+        {
+            var redisLock = new ReleaseableHierarchicalRedlock(
+                logger,
+                redisCaches,
+                parentResource,
+                resource,
+                expiryTime,
+                LockInfo,
+                waitTime,
+                retryTime,
+                retryConfiguration,
+                cancellationToken);
+    
+            redisLock.Start();
+    			
+            return redisLock;
+        }
+        
+    }
+
+    public class ReleaseableRedlock : RedLock
+    {
+        private static readonly string ExtendIfNoReleaseScript =
+            EmbeddedResourceLoader.GetEmbeddedResource("RedLockNet.SERedis.Lua.ExtendUpdated.lua");
+        protected ReleaseableRedlock(ILogger<RedLock> logger, ICollection<RedisConnection> redisCaches, string resource, TimeSpan expiryTime, string LockInfo, TimeSpan? waitTime = null,
+            TimeSpan? retryTime = null, RedLockRetryConfiguration retryConfiguration = null,
+            CancellationToken? cancellationToken = null) : base(logger, redisCaches, resource,
+            expiryTime, LockInfo, waitTime, retryTime, retryConfiguration, cancellationToken)
+        {
+        }
+
+        protected override string GetExtendScript()
+        {
+            return ExtendIfNoReleaseScript;
+        }
+        
+        internal new static ReleaseableRedlock Create(
+            ILogger<RedLock> logger,
+            ICollection<RedisConnection> redisCaches,
+            string resource,
+            TimeSpan expiryTime,
+            string LockInfo,
+            TimeSpan? waitTime = null,
+            TimeSpan? retryTime = null,
+            RedLockRetryConfiguration retryConfiguration = null,
+            CancellationToken? cancellationToken = null)
+        {
+            var redisLock = new ReleaseableRedlock(
+                logger,
+                redisCaches,
+                resource,
+                expiryTime,
+                LockInfo,
+                waitTime,
+                retryTime,
+                retryConfiguration,
+                cancellationToken);
+
+            redisLock.Start();
+			
+            return redisLock;
+        }
     }
 
     public class RedRelease
     {
+        private static readonly string UpdatedRenameScript =
+            EmbeddedResourceLoader.GetEmbeddedResource("RedLockNet.SERedis.Lua.RenameUpdated.lua");
+        
         protected readonly ICollection<RedisConnection> redisCaches;
         protected readonly ILogger<RedRelease> logger;
         protected readonly int quorum;
@@ -111,7 +187,7 @@ namespace RedLockNet.SERedis
                 return RedReleaseStatus.Expired;
             }
 
-            if (lockResult.Released + lockResult.Conflicted >= quorum)
+            if (lockResult.Released + lockResult.NotFound >= quorum)
             {
                 // we had enough instances for a quorum, but some were locked with another LockId
                 return RedReleaseStatus.Conflicted;
@@ -121,7 +197,7 @@ namespace RedLockNet.SERedis
         }
         
         protected static RedReleaseInstanceSummary PopulateReleaseResult(
-            IEnumerable<RedLockInstanceResult> instanceResults)
+            IEnumerable<ReleaseInstanceResult> instanceResults)
         {
             var acquired = 0;
             var conflicted = 0;
@@ -131,13 +207,13 @@ namespace RedLockNet.SERedis
             {
                 switch (instanceResult)
                 {
-                    case RedLockInstanceResult.Success:
+                    case ReleaseInstanceResult.Success:
                         acquired++;
                         break;
-                    case RedLockInstanceResult.Conflicted:
+                    case ReleaseInstanceResult.NotFound:
                         conflicted++;
                         break;
-                    case RedLockInstanceResult.Error:
+                    case ReleaseInstanceResult.Error:
                         error++;
                         break;
                 }
@@ -203,6 +279,11 @@ namespace RedLockNet.SERedis
                 {
                     return (RedReleaseStatus.Released, flagSummary);
                 }
+                
+                if (flagSummary.NotFound >= quorum && validityTicks > 0)
+                {
+                    return (RedReleaseStatus.Released, flagSummary);
+                }
 
                 // we failed to flag enough locks for a quorum, unflag everything and try again
                 await RemoveFlagReleaseAsync().ConfigureAwait(false);
@@ -232,32 +313,32 @@ namespace RedLockNet.SERedis
          * This should "release" the lock once a quorum occurs.
          * The locks auto extender should now account for the release key and dispose of itself.
          */
-        private async Task<RedLockInstanceResult> ReleaseFlagAsync(RedisConnection cache)
+        private async Task<ReleaseInstanceResult> ReleaseFlagAsync(RedisConnection cache)
         {
             var redisKey = GetRedisKey(cache.RedisKeyFormat, Resource);
             var releaseKey = GetReleaseKey(cache.RedisKeyFormat, Resource);
             var host = GetHost(cache.ConnectionMultiplexer);
 
-            RedLockInstanceResult result;
-
+            ReleaseInstanceResult result;
+            RedisKey[] keys = { redisKey, releaseKey };
             try
             {
                 logger.LogTrace($"ReleaseFlagAsync enter {host}: {redisKey}");
-                bool renamed = await cache.ConnectionMultiplexer
+                bool renamed = (bool) await cache.ConnectionMultiplexer
                     .GetDatabase(cache.RedisDatabase)
-                    .KeyRenameAsync(redisKey, releaseKey, When.Always, CommandFlags.DemandMaster)
+                    .ScriptEvaluateAsync(UpdatedRenameScript,keys, flags : CommandFlags.DemandMaster)
                     .ConfigureAwait(false);
 
                 result = renamed
-                    ? RedLockInstanceResult.Success
-                    : RedLockInstanceResult.Conflicted;
+                    ? ReleaseInstanceResult.Success
+                    : ReleaseInstanceResult.NotFound;
 
             }
             catch (Exception ex)
             {
                 logger.LogDebug($"Error flagging lock release, instance {host}: {ex.Message}");
 
-                result = RedLockInstanceResult.Error;
+                result = ReleaseInstanceResult.Error;
             }
 
             logger.LogTrace($"ReleaseFlagAsync exit {host}: {redisKey}, {result}");
@@ -309,13 +390,14 @@ namespace RedLockNet.SERedis
             var host = GetHost(cache.ConnectionMultiplexer);
 
             var redisResult = false;
+            RedisKey[] keys = {releaseKey, redisKey};
             try
             {
                 logger.LogTrace($"ReleaseFlagAsync enter {host}: {redisKey}");
-                // Returns 1 on success, 0 on failure setting expiry or key not existing, -1 if the key value didn't match
+                // Returns 1 on success, 0 on failure setting expiry or key not existing
                 redisResult = (bool) await cache.ConnectionMultiplexer
                     .GetDatabase(cache.RedisDatabase)
-                    .KeyRenameAsync(releaseKey, redisKey, When.Always, CommandFlags.DemandMaster)
+                    .ScriptEvaluateAsync( UpdatedRenameScript, keys, flags: CommandFlags.DemandMaster)
                     .ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -326,6 +408,13 @@ namespace RedLockNet.SERedis
             logger.LogTrace($"ReleaseFlagAsync exit {host}: {redisKey}, {redisResult}");
             return redisResult;
         }
+    }
+    
+    public enum ReleaseInstanceResult
+    {
+        Success,
+        NotFound,
+        Error
     }
     
     public enum RedReleaseStatus
@@ -354,20 +443,20 @@ namespace RedLockNet.SERedis
     
     public struct RedReleaseInstanceSummary
     {
-        public RedReleaseInstanceSummary(int released, int conflicted, int error)
+        public RedReleaseInstanceSummary(int released, int notFound, int error)
         {
             this.Released = released;
-            this.Conflicted = conflicted;
+            this.NotFound = notFound;
             this.Error = error;
         }
 
         public readonly int Released;
-        public readonly int Conflicted;
+        public readonly int NotFound;
         public readonly int Error;
 
         public override string ToString()
         {
-            return $"Released: {Released}, Conflicted: {Conflicted}, Error: {Error}";
+            return $"Released: {Released}, Conflicted: {NotFound}, Error: {Error}";
         }
     }
 }

@@ -33,7 +33,7 @@ namespace RedLockNet.SERedis
             });
         }
         
-        public IRedLock CreateHierarchicalLock(string parentResource, string resource, TimeSpan expiryTime, string lockInfo = null)
+        public virtual IRedLock CreateHierarchicalLock(string parentResource, string resource, TimeSpan expiryTime, string lockInfo = null)
         {
             ILogger<RedLock> logger = this.loggerFactory.CreateLogger<RedLock>();
             ICollection<RedisConnection> redisCaches = this.redisCaches;
@@ -48,7 +48,7 @@ namespace RedLockNet.SERedis
             return HierarchicalRedLock.CreateHierarchical(logger, redisCaches, parentResource, resource1, expiryTime1, LockInfo, waitTime, retryTime, retryConfiguration2, cancellationToken);
         }
         
-        public IRedLock CreateHierarchicalLock(
+        public virtual IRedLock CreateHierarchicalLock(
             string parentResource,
             string resource,
             TimeSpan expiryTime,

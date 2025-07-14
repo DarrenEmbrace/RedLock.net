@@ -97,7 +97,7 @@ namespace RedLockNet.SERedis
 			RaiseConfigurationChanged();
 		}
 
-		public IRedLock CreateLock(string resource, TimeSpan expiryTime,string lockInfo = null)
+		public virtual IRedLock CreateLock(string resource, TimeSpan expiryTime,string lockInfo = null)
 		{
 			return RedLock.Create(
 				this.loggerFactory.CreateLogger<RedLock>(),
@@ -119,7 +119,7 @@ namespace RedLockNet.SERedis
 				retryConfiguration: configuration.RetryConfiguration).ConfigureAwait(false);
 		}
 
-		public IRedLock CreateLock(string resource, TimeSpan expiryTime, TimeSpan waitTime, TimeSpan retryTime, CancellationToken? cancellationToken = null,string lockInfo = null)
+		public virtual IRedLock CreateLock(string resource, TimeSpan expiryTime, TimeSpan waitTime, TimeSpan retryTime, CancellationToken? cancellationToken = null,string lockInfo = null)
 		{
 			return RedLock.Create(
 				this.loggerFactory.CreateLogger<RedLock>(),

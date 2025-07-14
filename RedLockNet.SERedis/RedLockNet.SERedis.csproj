@@ -33,6 +33,7 @@
 	  <EmbeddedResource Include="Lua\Unlock.lua" />
 	  <EmbeddedResource Include="Lua\ExtendUpdated.lua" />
 	  <EmbeddedResource Include="Lua\LockHierarchical.lua" />
+	  <EmbeddedResource Include="Lua\RenameUpdated.lua" />
 	</ItemGroup>
 
 	<ItemGroup>
