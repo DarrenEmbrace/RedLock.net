@@ -31,19 +31,26 @@ namespace RedLockNet.SERedis
             try
             {
                 logger.LogTrace($"LockInstance enter {host}: {redisKey}, {LockId}, {expiryTime}");
-    				
+                
+                // Attempt to acquire the lock using a Lua script that checks for a blocking resource
                 var redisResult = cache.ConnectionMultiplexer
                     .GetDatabase(cache.RedisDatabase)
                     .ScriptEvaluate(
                         LockWithFileCheckScript,
-                        new RedisKey[] { redisParentKey, redisKey },
-                        new RedisValue[] { LockId, (int)expiryTime.TotalMilliseconds },
+                        new RedisKey[]
+                        {
+                            redisParentKey, redisKey
+                        }, // KEYS[1] = parent lock key (only check), KEYS[2] = actual lock key (try to acquire)
+                        new RedisValue[] {LockId, (int) expiryTime.TotalMilliseconds},
                         flags: CommandFlags.DemandMaster);
 
+                // If the result is not null, it means there is a blocking resource
+                // Could be from the parent (KEYS[1]) or from a failed attempt to acquire KEYS[2]
+                // The script returns the *value* of the blocking key so we can identify the blocker
                 if (!redisResult.IsNull)
                 {
-                    BlockingResource = (string) redisResult;
-                    return RedLockInstanceResult.Conflicted;
+                    BlockingResource = (string) redisResult; // Save the value of the blocking key
+                    return RedLockInstanceResult.Conflicted; // Indicate lock conflict due to existing blocker
                 }
 
                 return RedLockInstanceResult.Success;
